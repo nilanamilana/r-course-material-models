@@ -619,6 +619,697 @@ name %in% c('Bob', 'Carol')
 
 
 ## Logical operators
+1užd.
+1) Įsikelkite duomenis CER.
+#Duomenu ikelimas
+CER<-read.delim("C:/Users/evaf302/Downloads/Seminaras_01-20240207/CER.txt")
+attach(CER)
+
+2) Nusibraižykite pasirinktos valstybės BVP grafiką. Ar duomenys stacionarūs? (ne, nestacionarūs. Stacionarumas – momentai nepriklauso nuo laiko)
+#Grafikas
+plot.ts(Y.CZ) (rašom.ts, kad būtų tiesinė, o ne taškiukai, pagal laiką)
+
+3) Priskirkite laiko eilutės atributus kintamajam ir "numeskite" paskutinius 6 stebėjimus (juos prognozuosime)
+#Priskiriame laiko eilutes savybes
+(<-ts naudojama to create time-series objects)
+Y.CZ<-ts(Y.CZ, start=c(2001,1), frequency = 4)
+
+#Sutrumpiname stebejimu skaiciu (tam, kad palygintume faktinius duomenis su modelio prognozemis)
+(<-window naudojama atimti stebėjimus už reikiamo laikotarpio)
+y.cz<-window(Y.CZ, end=c(2016,4)) (nurodom paskutinį tinkamą laikotarpį; c reiškia combine)
+
+
+4) Susikurkite augimo tempo kintamąjį ir patikrinkite šio kintamojo autokorelogramas (tai padės parinkti tinkamą modelio eilę).
+#Kadangi BVP - nestacionarus, sukuriame kintamaji - BVP augima (% pokyti)
+(Stationarity means that the mean, variance, and autocorrelation of the data do not change over time – velgi nestacionaru, diferencijuojant padarom stacionarumą)
+
+(dy žymim BVP augimo tempą)
+(diff() - naudojama norint gauti skirtumą tarp kiekvieno vektoriaus elemento iš eilės (-velavimai, pasikartojimai?)
+(diff(log(x)) calculates relative changes)
+dy.cz<-diff(log(y.cz))
+plot(dy.cz)
+ 
+
+#Pagal autokorelogramas parenkame pradinio modelio specifikacija
+(acf – (autokovariacija)/autokoreliacija; pacf – daline)
+acf(dy.cz)
+
+(jei acf kerta paklaidos ribą; ji statistiškai reikšminga, egzistuoja autokoreliacija, yra velavimas kurį reikia įtraukt į modelį)
+
+pacf(dy.cz)
+ 
+5) Sudarykite tinkamą ARMA modeli ̨
+(lmtest - Testing Linear Regression Models)
+install.packages("lmtest")
+library(lmtest)
+
+#AR(1) procesas (AR/MA – bandymas rasti kintamojo reikšmių generavimo mechanizmą(kai inercija nenuspėjama))
+ar1<-arima(dy.cz, order=c(1,0,0))  ((aic=-453))
+#Tikriname koeficientu iverciu reiksminguma
+coeftest(ar1)
+#Patikriname ar modelio paklaidos yra autokoreliuotos
+acf(residuals(ar1))
+ 
+pacf(residuals(ar1))
+ (nera autokoreliacijos)
+
+#MA(1)
+ma1<-arima(dy.cz, order=c(0,0,1)) [aic=-443]
+coeftest(ma1)
+pacf(residuals(ma1))
+ 
+
+#MA(4)
+ma4<-arima(dy.cz, order=c(0,0,4)) [aic=-451]
+coeftest(ma4)
+pacf(residuals(ma4))
+ 
+
+#ARMA(1,1)
+arma11<-arima(dy.cz, order=c(1,0,1)) [aic=-452]
+coeftest(arma11)
+
+#ARMA(1,4)
+arma14<-arima(dy.cz, order=c(1,0,4), fixed=c(NA,NA,0,0,NA,NA))
+coeftest(arma14)
+pacf(residuals(arma14))
+ 
+
+#Kaip pasirinkti modeli?
+#Atrenkame modeli pagal Akaike (AIC) informacini kriteriju - kuo zemesnis, tuo geriau
+ar1$aic (-453)
+ma4$aic (-451)
+arma14$aic (-454)
+
+6) Naudodamiesi tinkamiausiu modeliu atlikite 6 periodų į priekį prognozes.
+#Prognozės
+install.packages("forecast")
+library(forecast)
+
+#Gauname 6 ateinanciu periodu BVP augimo prognozes pagal ARMA(1,4) modeli
+n<-predict(arma14, n.ahead=6)
+n$pred
+ (prognozė, kiek augs)
+
+7) Grafiškai atvaizduokite faktinį BVP augimo tempą ir prognozes. Taip pat atvaizduokite faktinį BVP ir prognozuojamą BVP.
+#BVP augimo grafikas+prognoze
+plot.ts(diff(log(Y.CZ))) (be nuimtų 6 laikotarpių);                    lines(n$pred, col="red")
+ 
+plot.ts(Y.CZ)
+
+#Kumuliatyvus BVP augimo tempas (increasing by successive additions/accumulations)
+(Cumprod- cumulative product;	exp- returns the mathematical e raised to power of a specific number)
+c.prog<-cumprod(exp(n$pred))
+
+#Issaugome paskutini modelyje naudota stebejima (prireiks prognozuojamam BVP sudaryti)
+Y.BVP<-window(Y.CZ, start=c(2016,4), end=c(2016,4))
+
+#BVP prognoze
+BVP.prog<-c.prog*as.numeric(Y.BVP)
+
+#Prognozei priskiriame laiko eilutes atributus
+BVP.prog<-ts(BVP.prog, start=c(2017,1), frequency=4)
+
+#Grafikas su faktiniu BVP
+plot.ts(Y.CZ)
+
+#Papildome grafika su prognoze
+lines(BVP.prog, col="red")
+
+
+
+#Isikeliam duomenis
+library(readxl)
+Chem<-read_excel("C:/Users/evaf302/Downloads/Seminaras_01-20240207/Chem.xlsx")
+#DU - nestacionarus
+wage<-Chem$Avg_Wage
+plot.ts(wage)
+#DU augimo tempai
+dw<-diff(log(wage))
+#Autokorelogramos
+acf(dw)
+pacf(dw)
+
+#AR(4)
+w.ar4<-arima(dw, order=c(4,0,0))
+coeftest(w.ar4)
+acf(residuals(w.ar4))
+
+#MA(4)
+w.ma4<-arima(dw, order=c(0,0,4), fixed=c(NA,NA,0,NA,NA))
+coeftest(w.ma4)
+pacf(residuals(w.ma4))
+
+#ARMA(4,4)
+w.arma44<-arima(dw, order=c(4,0,4), fixed=c(0,0,0,NA,NA,0,0,NA,NA))
+coeftest(w.arma44)
+pacf(residuals(w.arma44))
+
+#Akaike
+w.ar4$aic
+w.arma44$aic
+
+#Prognoze
+w.prog<-predict(w.arma44, n.ahead=5)$pred
+
+plot.ts(dw, xlim=range(0,57))
+lines(w.prog, col="red")
+
+
+
+
+2užd.
+Dokumente ’LT_data.xlsx’ yra pateikti Lietuvos vartotoju ̨ kainu ̨ indekso (CPI), realaus BVP (rGDP) ir vartotoju ̨ lūkesčiu ̨ Lietuvos ekonomikai ateinantiems 12 mėnesiu ̨ (E_GDP) duomenys.
+
+library(readxl)
+#Isikeliame duomenis
+LT<-read_excel("C:/Users/Fin_eko/Sem_02/LT_data.xlsx")
+[("~/Desktop/3 k. 2 semestras/Ekonometrija/2 seminaras/LT_data.xlsx")]
+attach(LT)
+
+#install.packages("vars")
+library(vars) (var modelling)
+library(urca) (Laiko eilučių duomenų vieneto šaknų ir kointegracijos testai)
+
+#Pries atliekant ADF testa, verta paziureti grafika, tam kad parinktume tinkama ADF testo specifikacija (RW/RW su dreifu/RW su trendu) [random walk]
+plot.ts(CPI)
+ 
+
+1) Atlikite Dickey-Fuller ir Phillips-Perron testus VKI (CPI) ir nurodykite kelinta eile duomenys yra integruoti (komanda ur.df()). (apskaičiuoja papildytą Dickey-Fuller testą)
+#ADF testas CPI
+mod.cpi<-ur.df(CPI, type="trend", selectlags = "AIC")
+summary(mod.cpi)
+
+#tau indikuoja nestacionaruma
+(If the p-value is less than your chosen significance level (e.g., 0.05), you can reject the null hypothesis of a unit root, indicating stationarity) test-statistic didesnė už nurodytas tau kritines reikšmes, taigi nestacionaru
+#phi3 indikuoja jog trendas neegzistuoja (H0: theta=gamma=0)
+false. Sudauginus phi reikšmes su nurodytais procentais ir sudėjus gaunam – 0,96, turi but 1 kad trendas
+#phi2 H0:theta=delta=gamma=0 [0,73]
+P value mažesnė už reikšmingą tt – trendo nėra
+
+mod.cpi<-ur.df(CPI, type="drift", selectlags = "AIC")
+summary(mod.cpi)
+if p-value significant – it indicates potencial drift
+ 
+mod.cpi<-ur.df(CPI, type="none", selectlags = "AIC")
+summary(mod.cpi)
+test statistic didesnė už kritines tau – nestacionaru
+koef.>p-value - blogai
+
+#Kadangi CPI nestacionarus, diferencijuojam ir kartojame testa
+mod.cpi<-ur.df(diff(CPI), type="none", selectlags = "AIC")
+summary(mod.cpi)
+(test. stat: -2,25; tau kritinės: -2,6, -1,95..) didesnė reikšmė test.stat už 1ną kritinę (stacionaru)
+p-value>reikšmingą koef -> tinka modelis
+
+#atmetame H0, CPI yra pirma eile integruotas procesas
+#CPI~I(1)
+
+library(aTSA)
+pp.test(CPI)
+phillips-kad kintamasis turi vienetinę šaknį. Nulinė hipotezė - kad kintamasis turi vienetinę šaknį, o alternatyva - kad kintamasis buvo sukurtas stacionariu procesu (neapima lagged values) kad pamatytumėm, ar duomenys kinta nuspėjamai
+
+2) Sukurkite infliacijos kintamąjį ir "numeskite" paskutinius 4 stebėjimus.
+#Susikuriam infliacijos kintamaji
+infl<-diff(log(CPI))
+calculates change
+infl.full<-ts(infl, start=c(2001,3), frequency = 4) (dingsta pirmas stebėjimas, nes ieškom % pokyčio?)
+
+#pasalinam 4 naujausius stebejimus
+infl.sample<-window(infl.full, end=c(2021,4))
+
+3) Sudarykite tinkamą ARMA modeli ̨.
+#Noredami sudaryti ARMA modeli, pradedame nuo modeliuojamo proceso autokoreliacijos f-ju pradines eiles parinkimui
+acf(infl.sample)
+ 
+
+library(lmtest)
+#AR(4)
+ar4<-arima(infl.sample, order=c(4,0,0), fixed = c(NA,0,0,NA,NA))
+coeftest(ar4)
+pacf(residuals(ar4))
+#Paklaidos nezymiai autokoreliuoja (2 velavimas)
+ 
+
+#MA(4)
+ma4<-arima(infl.sample, order=c(0,0,4), fixed=c(NA,NA,0,NA,NA))
+coeftest(ma4)
+pacf(residuals(ma4))
+
+#ARMA(4,4)
+arma44<-arima(infl.sample, order=c(4,0,4), fixed=c(NA,0,0,NA,0,NA,0,0,NA))
+coeftest(arma44)
+pacf(residuals(arma44))
+
+#Modeliu informaciniai kriterijai
+ar4$aic
+ma4$aic
+arma44$aic
+
+4) Atlikite modelio prognozes ir suskaičiuokite prognoziu ̨ RMSE rankiniu būdu.
+#Modelio prognozes
+pred.arma44<-predict(arma44, n.ahead=4)$pred
+#Faktines vertes
+infl.test<-tail(infl.full,4)
+#RMSE rankiniu budu
+rmse.arma44<-sqrt(sum((pred.arma44-infl.test)^2)/length(infl.test))
+rmse.arma44
+
+5) Automatiniu būdu palyginkite kelis modelius (komanda accuracy()).
+library(forecast)
+#Automatiniu budu
+accuracy(pred.arma44, infl.test)
+accuracy(predict(ma4, n.ahead = 4)$pred, infl.test)
+
+6) Raskite prognoze ̇s pasikliautinius intervalus rankiniu ir automatiniu būdu (komanda forecast()).
+#Pasikliautinis intervalas (95%)
+max.pred<-predict(arma44, n.ahead=4)$pred+predict(arma44, n.ahead=4)$se*1.96
+min.pred<-predict(arma44, n.ahead=4)$pred-predict(arma44, n.ahead=4)$se*1.96
+
+ts.plot(infl.full)
+lines(min.pred, col="red")
+lines(max.pred, col="red")
+
+#Pasikliautinis intervalas automatiniu budu
+forecast(arma44, h=4)
+
+
+Dokumente "MSFT.xlsx" yra pateikta informacija apie Microsoft ketvirtines pajamas.
+#Ikeliam duomenis
+MSFT<-read_excel("C:/Users/Fin_eko/Sem_02/MSFT.xlsx")
+8) Grafiškai paanalizuokite Microsoft pajamu ̨ augimo tempo duomenis (hint: sezoniškumas).
+#augimo tempo kintamasis
+msft<-diff(log(MSFT$Revenue))
+
+9)"Numeskite" 4 naujausius stebėjimus.
+#Atmetam keturis naujausius stebejimus
+msft.sample<-head(msft,55)
+#Atskirai isaugom keturis naujausius stebejimus
+msft.test<-tail(msft,4)
+#Autokorelogramos pradinei modelio eilei parinkti
+acf(msft.sample)
+pacf(msft.sample)
+
+10) Sudarykite ARMA model ̨i ir atlikite 4 periodu ̨ prognozę.
+#ARMA(4,4)
+arma44<-Arima(msft.sample, order=c(4,0,4), fixed=c(0,0,0,NA,NA,0,0,NA,NA))
+coeftest(arma44)
+pacf(residuals(arma44))
+
+11) Susikurkite fiktyvius ketvirčio kintamuosius ir apjunkite juos į lentelę.
+#Susikuriam fiktyvius kintamuosius
+dummy_q2<-rep(c(1,0,0,0),15)
+dummy_q2<-head(dummy_q2,59)
+
+dummy_q4<-rep(c(0,0,1,0),15)
+dummy_q4<-head(dummy_q4,59)
+
+dummy_q1<-rep(c(0,0,0,1),15)
+dummy_q1<-head(dummy_q1,59)
+#Apjungiam i lentele
+DummyQ<-cbind(dummy_q1, dummy_q2, dummy_q4)
+#Apkarpom lentele i dvi - modelio sudarymui ir prognozei
+DummyQ.sample<-head(DummyQ,55)
+DummyQ.test<-tail(DummyQ,4)
+
+12) Sudarykite ARMA model ̨i su fiktyviais kintamaisiais.
+#ARMA su egzogeniniais kintamaisiais
+arma_dum<-Arima(msft.sample, order=c(4,0,4), xreg=DummyQ.sample, fixed=c(0,0,0,NA,NA,0,0,NA,NA,0,NA,NA))
+coeftest(arma_dum)
+pacf(residuals(arma_dum))
+
+13) Atlikite prognozes keturiems periodams  ̨i priek ̨i ir palyginkite kuris iš modeliu ̨ tiksliau prognozavo.
+#Prognozes
+pred<-forecast(arma44, h=4)$mean
+pred2<-forecast(arma_dum, h=4, xreg=DummyQ.test)$mean
+#Prognoziu palyginimas
+accuracy(pred, msft.test)
+accuracy(pred2, msft.test)
+
+
+normal_garch_model.R
+The standard GARCH model as the workhorse model. The basics of using the rugarch package for specifying and estimating the workhorse GARCH(1,1) model in R. In this scrpit are also shown its usefulness in tactical asset allocation.
+
+Computing returns
+For managing financial risk, we need to first measure the risk by analyzing the return series. Here, you are given the S&P 500 price series and you need to plot the daily returns. You will see that large (positive or negative) returns tend to be followed by large returns of either sign, and small returns tend to be followed by small returns. The periods of sustained low volatility and high volatility are called volatility clusters.
+
+Rolling approach
+You can visualize the time-variation in volatility by using the function chart.RollingPerformance()in the package PerformanceAnalytics. An important tuning parameter is the choice of the window length. The shorter the window, the more responsive the rolling volatility estimate is to recent returns. The longer the window, the smoother it will be. The function sd.annualized lets you compute annualized volatility under the assumption that the number of trading days in a year equals the number specified in the scale argument.
+
+Prediction errors
+Under the GARCH model, the variance is driven by the square of the prediction errors e = R − μ. In order to calculate a GARCH variance, you thus need to first compute the prediction errors. For daily returns, it is common practice to set μ equal to the sample average. There is a large positive autocorrelation in the absolute value of the prediction errors. Positive autocorrelation reflects the presence of volatility clusters. When volatility is above average, it stays above average for some time. When volatility is low, it stays low for some time.
+
+The GARCH model
+GARCH models come in many flavors. You thus need to start off by specifying the mean model, the variance model and the error distribution that you want to use. The best model to use is application-specific. A realistic GARCH analysis thus involves specifying, estimating and testing various GARCH models.
+
+Out-of-sample forecasting
+The garchvol series is the series of predicted volatilities for each of the returns in the observed time series sp500ret. For decision making, it is the volatility of the future (not yet observed) return that matters. You get it by applying the ugarchforecast() function to the output from ugarchfit() In forecasting, we call this the out-of-sample volatility forecasts, as they involve predictions of returns that have not been used when estimating the GARCH model.
+
+Volatility targeting in tactical asset allocation
+GARCH volatility predictions are of direct practical use in portfolio allocation. According to the two-fund separation theorem of James Tobin, you should invest a proportion of your wealth in a risky portfolio and the remainder in a risk free asset, like a US Treasury bill.
+
+When you target a portfolio with 5% annualized volatility, and the annualized volatility of the risky asset is σ, then you should invest 0.05/σ in the risky asset.
+
+improvements_normal_garch_model.R
+GARCH models with a leverage effect and skewed student t innovations. Use GARCH models for estimating over ten thousand different GARCH model specifications.
+
+Estimation of non-normal GARCH model
+The function ugarchfit() does a joint estimation of all the mean, variance and distribution parameters. A general approach is to use a skewed student t distribution. You then need to estimate also the skew and shape parameters. You will see that you obtain parameter estimates are close to the true parameters. The difference between the estimated and true parameter is called the estimation error. On long time series, the error is typically small.
+
+Standardized returns
+A complete GARCH model requires to make an assumption about the distribution of the standardized returns. Once the model has been estimated you can verify the assumption by analyzing the standardized returns.
+
+performance_evaluation.R
+Analysis of statistical significance of the estimated GARCH parameters, the properties of standardized returns, the interpretation of information criteria and the use of rolling GARCH estimation and mean squared prediction errors to analyze the accuracy of the volatility forecast.
+
+applications.R
+Specific rugarch functionality for making VaR estimates, for using the GARCH model in production and for simulating GARCH returns. The estimation of the beta of a stock and finding the minimum variance portfolio.
+
+
+
+3užd.
+Dokumente’NYSE.txt’yra pateikti tarptautiniu ̨kompaniju ̨akciju ̨indekso kainos duomenys.
+#Isikeliam duomenis
+NYSE<-read.delim("C:/Users/evaf302/Downloads/OneDrive_1_2024-03-06/NYSE.txt")
+attach(NYSE)
+
+2) Sukurkite procentinės grąžos kintamąji ̨, sudarykite MA(1) modelį ir patikrinkite paklaidu ̨ autokoreliaciją.
+plot.ts(INT100)
+#Indekso graza procentais
+r<-diff(log(INT100))*100
+
+plot.ts(r)
+#Autokorelogramos padeda parinkti pirmini ARMA modeli
+acf(r)
+pacf(r)
+
+#Sudarome MA(1) proceso modeli
+library(forecast)
+library(lmtest)
+ma1<-Arima(r, order=c(0,0,1))
+coeftest(ma1)
+pacf(residuals(ma1))
+
+3) Sukurkite modelio paklaidu ̨ kvadrato kintamąjį, patikrinkite sąlyginio heteroskedastiškumo egzistavimą (tiek autokorelogramų, tiek pagalbinės Engle lygties pagalba).
+#Apsibreziame modelio paklaidu kvadrata
+res2<-residuals(ma1)^2
+#Paklaidu kvadrato autokorelograma, kuri padeda ivertinti ar paklaidu kvadratai yra autokoreliuoti
+#Jei taip - tai indikuoja, jog egzistuoja salyginis heteroskedastiskumas
+acf(res2)
+pacf(res2)
+
+#library(Hmisc), funkcijai Lag()
+#Formaliai ivertinti dispersijos salygini heteroskedastiskuma galime ivertindami pagalbine Engle lygti:
+[Engle metodas padeda sukurti residuals, o tada residuals tikrinami, ar nėra vienetinių šaknų. Jis naudoja išplėstinį Dickey-Fuller testą (ADF), kad patikrintų stacionarumą laiko eilutėse.]
+install.packages("Hmisc")
+library(Hmisc)
+engleaux<-lm(res2~Lag(res2,1)+Lag(res2,2)+Lag(res2,3))
+summary(engleaux)
+#LM testas (Lagrange daugikliu) Engle pagalbines lygties koeficientams ivertint
+summary(engleaux)$r.squared*length(res2)
+#Kritine Chi^2 verte
+qchisq(0.95, 3)
+
+4) Sudarykite tinkamos eilės GARCH modeli ̨ (paketas ’rugarch’).
+[Garch vertina nepastovumą]
+install.packages("rugarch")
+library(rugarch)
+#Patvirtinus, jog egzistuoja salyginis heteroskedastiskumas, zinome, jog reikia pritaikyti GARCH modeli
+#Pirmiausia, apibresime GARCH modelio specifikacija. variance.model parametre nurodome su dispersija susijusia informacija
+#t.y. GARCH modelio specifikacija. mean.model parametre nurodome informacija, susijusia su vidurkiu dydziais, 
+#t.y. pradinio ARMA modelio informacija
+spec.garch<-ugarchspec(variance.model =list(model="fGARCH",
+                 garchOrder=c(2,2), submodel="GARCH"),
+                       mean.model= list(armaOrder=c(0,1)),
+                 fixed.pars = list("mu"=0))
+#Tuomet nurodyta specifikacija pritaikome norimiems duomenims
+garch.r<-ugarchfit(spec=spec.garch, data=r)
+#Modelio rezultatai
+garch.r
+
+pacf(residuals(garch.r, standardize=TRUE)^2)
+
+
+
+Dokumente ’stock.csv’ yra pateikiama keleto kompaniju ̨ akciju ̨ kainu ̨ stebėjimai.
+#Isikeliame duomenis
+stock<-read.csv("C:/Users/evaf302/Downloads/OneDrive_1_2024-03-06/stock.csv")
+plot.ts(stock$GOOG)
+#proc grazos kintamasis
+goog<-diff(log(stock$GOOG))*100
+plot.ts(goog)
+#vidurkio modelis
+acf(goog)
+pacf(goog)
+ma1<-Arima(goog, order=c(0,0,1))
+coeftest(ma1)
+pacf(residuals(ma1))
+
+5) Sudarykite tinkamiausią ARMA model ̨i Tesla akcijos procentine ̇s grąžos kintama jam.
+ar1<-Arima(goog, order=c(1,0,0))
+coeftest(ar1)
+pacf(residuals(ar1))
+
+arma11<-Arima(goog, order=c(1,0,1))
+coeftest(arma11)
+pacf(residuals(arma11))
+
+ar1$aic
+ma1$aic
+#Paklaidu kvadratu autokorelograma siekiant ivertinti salyginio heteroskedastiskumo egzistavima
+pacf(residuals(ma1)^2)
+
+6) Sudarykite tinkamos eile ̇s GARCH modeli ̨ Tesla akcijos sąlyginei dispersijai modeliuoti.
+#garch modelis
+spec.goog<-ugarchspec(variance.model=list(model="fGARCH",
+                    garchOrder=c(1,2), submodel="GARCH"),
+                    mean.model= list(armaOrder=c(0,0)))
+garch.goog<-ugarchfit(spec=spec.goog, data=goog,out.sample = 200)
+garch.goog
+
+7) Nustatę tiksliausią modeli ̨, atlikite tiek vidurkio, tiek dispersijos "riedančias" prognozes pasirinktam horizontui ir atvaizduokite jas grafiškai.
+#garch modelio riedancios prognozes
+pred<-ugarchforecast(garch.goog, n.ahead=1, n.roll=200, out.sample = 200)
+#Prognoziu pasikiautinis intervalas
+ci.max<-pred@forecast$seriesFor[1,]+pred@forecast$sigmaFor[1,]*1.96
+ci.min<-pred@forecast$seriesFor[1,]-pred@forecast$sigmaFor[1,]*1.96
+#grafine prognozes reprezentacija
+y.lim<-c(max(ci.max), min(ci.min))
+plot.ts(tail(goog,200), ylim=y.lim)
+lines(pred@forecast$seriesFor[1,], col="green")
+lines(ci.max, col="red")
+lines(ci.min, col="red")
+
+
+
+
+4užd.
+Dokumente ’Mag7.xlsx’ yra pateikiama keleto kompaniju ̨ (Magnificent 7) akciju ̨ kainu ̨ bei prekybos apimties stebėjimai.
+#Ikeliam duomenis
+library(readxl)
+Mag<-read_excel("C:/Users/Documents/2023-2024/Fin_eko/Sem_04/Mag7.xlsx")
+attach(Mag)
+
+1) Sudarykite tinkamiausią ARMA modelį pasirinktos kompanijos akcijos procentinės grąžos kintamajam.
+#Nvidia procentines grazos kintamasis
+nvda<-diff(log(NVDA))*100
+#Autokorelograma ARMA modelio pradinei eilei parinkti
+pacf(nvda)
+
+#MA(1) modelis
+library(forecast)
+ma1<-Arima(nvda, order=c(0,0,1))
+library(lmtest)
+coeftest(ma1)
+pacf(residuals(ma1))
+#Paklaidos neautokoreliuoja. 
+
+2) Patikrinkite ar šiam kintamajam yra būdingas autoregresinis sąlyginis heteroskedastiškumas.
+#Paklaidu kvadratai - autokoreliuoja. Tai salyginio heteroskedastiskumo pozymis
+pacf(residuals(ma1)^2)
+
+3) Sudarykite tinkamiausią sąlyginės dispersijos modelį. Išbandykite visus paskaitoje aptartus GARCH modelio plėtinius.
+#sudarome GARCH modelius
+library(rugarch)
+#Specifikacija paprasto GARCH modelio
+nvda.spec<-ugarchspec(variance.model = list(model="fGARCH", garchOrder=c(1,1),
+                      submodel="GARCH"),
+                      mean.model = list(armaOrder=c(0,1)),
+                      distribution.model = "std")
+#GARCH ivertinimas
+garch.nvda<-ugarchfit(spec=nvda.spec, data=nvda)
+garch.nvda
+#Standartizuotu paklaidu kvadratu autokorelograma
+pacf(residuals(garch.nvda, standardize=TRUE)^2)
+#standartizuotu paklaidu histograma (skirstinio ivertinimui)
+hist(residuals(garch.nvda, standardize=TRUE))
+
+#GARCH-M
+garchm.spec<-ugarchspec(variance.model = list(model="fGARCH", garchOrder=c(1,1),
+                                            submodel="GARCH"),
+                      mean.model = list(armaOrder=c(0,1), archm=TRUE, archpow=2),
+                      distribution.model = "std")
+garchm.nvda<-ugarchfit(spec=garchm.spec, data=nvda)
+garchm.nvda
+
+#Integruotas GARCH (IGARCH)
+igarch.spec<-ugarchspec(variance.model = list(model="iGARCH", garchOrder=c(1,1)),
+                        mean.model = list(armaOrder=c(0,0)),
+                        distribution.model = "std")
+igarch.nvda<-ugarchfit(spec=igarch.spec, data=nvda)
+igarch.nvda
+
+#Slenkstinio GARCH ivertinimas (TGARCH)
+tgarch.spec<-ugarchspec(variance.model = list(model="fGARCH", garchOrder=c(1,1),
+                                            submodel="TGARCH"),
+                      mean.model = list(armaOrder=c(0,0)),
+                      distribution.model = "std")
+tgarch.nvda<-ugarchfit(spec=tgarch.spec, data=nvda)
+tgarch.nvda
+
+#Eksponentinio GARCH ivertinimas
+egarch.spec<-ugarchspec(variance.model = list(model="eGARCH", garchOrder=c(1,1)),
+                        mean.model = list(armaOrder=c(0,0)),
+                        distribution.model = "std")
+egarch.nvda<-ugarchfit(spec=egarch.spec, data=nvda)
+egarch.nvda
+
+#Asimetriniu laipsniu GARCH ivertinimas
+aparch.spec<-ugarchspec(variance.model = list(model="apARCH", garchOrder=c(1,1)),
+                        mean.model = list(armaOrder=c(0,0)),
+                        distribution.model = "std")
+aparch.nvda<-ugarchfit(spec=aparch.spec, data=nvda)
+aparch.nvda
+
+#Modeliu informaciniai kriterijai
+infocriteria(garch.nvda)[1]
+infocriteria(garchm.nvda)[1]
+infocriteria(igarch.nvda)[1]
+infocriteria(tgarch.nvda)[1]
+infocriteria(egarch.nvda)[1]
+infocriteria(aparch.nvda)[1]
+
+4) Papildykite dispersijos modelį dienos prieš prekybos apimčiu ̨ pokyčio kintamuoju. Nurodykite, ar praeitos dienos prekybos apimčiu ̨ pokyčiai gali padėti tiksliau prognozuoti sąlyginę dispersiją?
+#Prekybos apimciu pokycio kintamasis
+vol<-diff(log(Vol_NVDA))*100
+library(Hmisc)
+vol1<-Lag(vol,1)
+
+#Modelio papildymas isoriniu regresoriumi
+aparch.spec<-ugarchspec(variance.model = list(model="apARCH", garchOrder=c(1,1), 
+                        external.regressors=matrix(vol1[-1])),
+                        mean.model = list(armaOrder=c(0,0)),
+                        distribution.model = "std")
+aparch.nvda<-ugarchfit(spec=aparch.spec, data=nvda[-1])
+aparch.nvda
+5) Sudarykite ARMA model ̨i prekybos apimčiu ̨ pokyčio kintamajam. Pasinaudokite modelio prognozėmis surasti numanomą prekybos apimčiu ̨ pokytį laikotarpiui t. Papildykite GARCH modelį šiuo kintamuoju. Ar jis reikšmingai pagerina sąlyginės dispersijos modeliavimą?
+#ARMA modelis prekybos apimtis
+pacf(vol)
+#AR
+vol.ar<-Arima(vol, order=c(5,0,0))
+coeftest(vol.ar)
+pacf(residuals(vol.ar))
+#Paklaidos autokoreliuoja.
+
+#MA
+vol.ma<-Arima(vol, order=c(0,0,3))
+coeftest(vol.ma)
+pacf(residuals(vol.ma))
+#Paklaidos autokoreliuoja.
+
+#ARMA
+vol.arma<-Arima(vol, order=c(1,0,2))
+coeftest(vol.arma)
+pacf(residuals(vol.arma))
+#Paklaidos neautokoreliuoja.
+
+length(vol.arma$fitted)
+#Numanomos apimciu pokyciu vertes 
+vol_f<-vol.arma$fitted
+
+#Papildytas modelis
+aparch.spec2<-ugarchspec(variance.model = list(model="apARCH", garchOrder=c(1,1), 
+                                              external.regressors=matrix(vol_f)),
+                        mean.model = list(armaOrder=c(0,0)),
+                        distribution.model = "std")
+aparch.nvda2<-ugarchfit(spec=aparch.spec2, data=nvda)
+aparch.nvda2
+
+
+
+
+
+5užd.
+Dokumente ’Mag7.xlsx’ yra pateikiama keleto kompaniju ̨ (Magnificent 7) akciju ̨ kainu ̨ bei prekybos apimties stebe ̇jimai. 
+library(readxl)
+#Isikeliam duomenis
+mag7<-read_excel("C:/Users/evaf303/Downloads/OneDrive_1_2024-04-16/Mag7.xlsx")
+attach(mag7)
+
+1) Sudarykite tinkamiausią GARCH model ̨i pasirinktos kompanijos akcijos procentinės grąžos kintamajam.
+#Procentines grazos kintamasis
+amzn<-diff(log(AMZN))
+#autokorelogramos vidurkio modelio eiles parinkimui
+pacf(amzn)
+
+install.packages("rugarch")
+library(rugarch)
+#GARCH modelio specifikacija
+amzn.spec<-ugarchspec(variance.model = list(model="fGARCH",
+                  garchOrder=c(1,1), submodel="GARCH"),
+           mean.model = list(armaOrder=c(0,0)))
+#GARCH modelio ivertinimas
+garch.amzn<-ugarchfit(spec=amzn.spec, data=amzn, out.sample = 50)
+#Rezultatai
+garch.amzn
+
+2) Atlikite paskutiniu ̨ 50 dienu ̨ riedančias prognozes ir sudarykite 95% pasikliautinį intervalą.
+#GARCH riedanti prognoze
+pred.garch<-ugarchforecast(garch.amzn, n.ahead = 1, n.roll=50, out.sample = 50)
+
+#Pasikliautiniai intervalai
+ci.max<-pred.garch@forecast$seriesFor[1,]+1.96*pred.garch@forecast$sigmaFor[1,]
+ci.min<-pred.garch@forecast$seriesFor[1,]-1.96*pred.garch@forecast$sigmaFor[1,]
+
+3) Sudarykite bazini ̨ stochastinio volatilumo modeli ̨ dispersijai. Modelio forma iš R paketo ’stochvol’ pateikta žemiau: (funkcija svsample())
+ duota
+install.packages("stochvol")
+library(stochvol)
+#SV modelis
+amzn.sv<-svsample(amzn, designmatrix = "ar0")
+summary(amzn.sv, showlatent = FALSE)
+
+4) Sudarykite stochastinio volatilumo riedančios prognoze ̇s 2.5% ir 97.5% kvantiles. (funkcija svsample_roll())
+#SV modelio riedanti prognoze 2.5% ir 97.5% skirstinio kvantilėms
+pred.sv<-svsample_roll(amzn, designmatrix = "ar0", draws=4000,
+                       n_ahead=1, forecast_length = 50,
+                       calculate_quantile = c(0.025, 0.975),
+                       calculate_predictive_likelihood = FALSE)
+pred.sv[[1]]$predicted_quantile
+#Tuscia lentele
+pred_sv<-cbind(rep(0,50), rep(0,50))
+#Kvantiliu prognozes istraukiame i tuscia lentele ciklo pagalba
+for (i in 1:50){
+  pred_sv[i,]<-pred.sv[[i]]$predicted_quantile
+}
+5) Palyginkite GARCH ir SV modelio prognozes grafiškai
+#Grafine reprezentacija
+plot.ts(tail(amzn,50), ylim=range(-0.08,0.08))
+lines(ci.max, col="blue")
+lines(ci.min, col="blue")
+lines(pred_sv[,1], col="red")
+lines(pred_sv[,2], col="red")
+
+
+
+pap.:
+If the data points are changing in an unpredictable way, then the time series is non-stationary.
+
+The optional argument “fixed.se” in the ugarchfit function indicates whether to calculate standard errors for those parameters fixed during the post optimization stage.
+Txt – read.delim
+Excel – read.excel
+
+
 
 Given a logical value (or vector), we can use the logic operators & (AND), | (OR) and ! (NOT). In the following table, x and y are both logical values.
 
